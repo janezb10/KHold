@@ -43,15 +43,11 @@ void KHoldCandidateWord::select(InputContext *inputContext) const {
 KHoldState::KHoldState(KHold *khold, InputContext *ic) : khold_(khold), ic_(ic) {}
 
 KHoldState::~KHoldState() {
-    if (timer_) {
-        timer_->setEnabled(false);
-    }
+    if (timer_) timer_->setEnabled(false);
 }
 
 void KHoldState::reset() {
-    if (timer_) {
-        timer_->setEnabled(false);
-    }
+    if (timer_) timer_->setEnabled(false);
     holding_ = false;
     lookupTableActive_ = false;
     currentKeyUTF8_.clear();
@@ -67,16 +63,20 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
 
     if (event.isRelease()) {
         if (holding_ && sym == currentKeySym_) {
-            if (timer_ && timer_->isEnabled()) {
-                timer_->setEnabled(false);
+            if (lookupTableActive_) {
                 holding_ = false;
+            } else {
+                if (timer_) timer_->setEnabled(false);
                 ic_->commitString(currentKeyUTF8_);
                 reset();
-                return true;
             }
-            holding_ = false;
+            return true;
         }
         return lookupTableActive_;
+    }
+
+    if (holding_ && sym == currentKeySym_) {
+        return true; 
     }
 
     if (lookupTableActive_) {
@@ -99,11 +99,9 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
     }
 
     if (const auto* entry = khold_->getEntry(sym)) {
-        if (holding_) return true;
-        
         holding_ = true;
         currentKeySym_ = sym;
-        currentKeyUTF8_ = entry->keyUTF8;
+        currentKeyUTF8_ = Key::keySymToUTF8(sym);
         currentCandidates_ = entry->candidates;
 
         uint64_t targetTime = now(CLOCK_MONOTONIC) + khold_->delay() * 1000;
@@ -121,9 +119,8 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
         return true;
     }
 
-    if (holding_) {
-        timer_->setEnabled(false);
-        holding_ = false;
+    if (holding_ && !lookupTableActive_) {
+        if (timer_) timer_->setEnabled(false);
         ic_->commitString(currentKeyUTF8_);
         reset();
         return false;
@@ -195,9 +192,7 @@ void KHold::setConfig(const RawConfig &rawConfig) {
                     std::vector<std::string> cands;
                     if (cand_val.is_array()) {
                         for (const auto& item : cand_val) {
-                            if (item.is_string()) {
-                                cands.push_back(item.get<std::string>());
-                            }
+                            if (item.is_string()) cands.push_back(item.get<std::string>());
                         }
                     } else if (cand_val.is_string()) {
                         std::string cands_str = cand_val.get<std::string>();
@@ -205,7 +200,6 @@ void KHold::setConfig(const RawConfig &rawConfig) {
                             cands.push_back(utf8::UCS4ToUTF8(cp));
                         }
                     }
-                    
                     if (!key_str.empty() && !cands.empty()) {
                         bool found = false;
                         for (auto& entry : newEntries) {
@@ -271,14 +265,10 @@ void KHold::setConfig(const RawConfig &rawConfig) {
 
 const KHoldEntryInternal* KHold::getEntry(KeySym sym) const {
     auto it = entryMap_.find(sym);
-    if (it != entryMap_.end()) {
-        return &it->second;
-    }
-    return nullptr;
+    return (it != entryMap_.end()) ? &it->second : nullptr;
 }
 
-void KHold::onKeyEvent(Event &event) const
-{
+void KHold::onKeyEvent(Event &event) const {
     auto &keyEvent = static_cast<KeyEvent &>(event);
     auto *state = keyEvent.inputContext()->propertyFor(&factory_);
     if (state->handleKeyEvent(keyEvent)) {
