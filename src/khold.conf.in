@@ -1,0 +1,12 @@
+[Addon]
+Name=KHold
+Comment=Character selection menu on long-press
+Category=Module
+Type=SharedLibrary
+OnDemand=False
+Configurable=True
+Library=libkhold
+Version=5.1.12
+
+[Addon/Dependencies]
+0=core

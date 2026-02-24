@@ -1,0 +1,36 @@
+# Build direktoriji (vsebujejo ogromno smeti)
+build/
+cmake-build-debug/
+bin/
+obj/
+
+# CMake generirane datoteke
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+install_manifest.txt
+compile_commands.json
+*.cmake
+
+# Binarni izpisi (tvoj dejanski addon)
+*.so
+*.o
+*.a
+*.la
+*.lo
+
+# Generirane konfiguracije (tiste, ki nastanejo iz .in datotek)
+src/khold.conf
+khold.conf
+
+# Specifično za urejevalnike
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Začasne datoteke
+*~
+*.bak
