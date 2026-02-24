@@ -51,7 +51,8 @@ void KHoldState::reset() {
     }
     holding_ = false;
     lookupTableActive_ = false;
-    currentKey_.clear();
+    currentKeyStr_.clear();
+    currentKeySym_ = FcitxKey_None;
     currentCandidates_.clear();
     ic_->inputPanel().reset();
     ic_->updateUserInterface(UserInterfaceComponent::InputPanel);
@@ -59,18 +60,19 @@ void KHoldState::reset() {
 }
 
 bool KHoldState::handleKeyEvent(const KeyEvent &event) {
+    KeySym sym = event.key().sym();
+
     if (event.isRelease()) {
-        if (!currentKey_.empty() && event.key().sym() == Key(currentKey_).sym()) {
-            if (holding_) {
-                if (timer_ && timer_->isEnabled()) {
-                    timer_->setEnabled(false);
-                    holding_ = false;
-                    ic_->commitString(currentKey_);
-                    reset();
-                    return true;
-                }
+        if (holding_ && sym == currentKeySym_) {
+            if (timer_ && timer_->isEnabled()) {
+                // KRATEK PRITISK: Hitra sprostitev
+                timer_->setEnabled(false);
                 holding_ = false;
+                ic_->commitString(currentKeyStr_);
+                reset();
+                return true;
             }
+            holding_ = false;
         }
         return lookupTableActive_;
     }
@@ -81,7 +83,7 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
             ic_->inputPanel().candidateList()->candidate(idx).select(ic_);
             return true;
         }
-        if (event.key().sym() == FcitxKey_Escape || event.key().sym() == FcitxKey_BackSpace) {
+        if (sym == FcitxKey_Escape || sym == FcitxKey_BackSpace) {
             reset();
             return true;
         }
@@ -90,16 +92,13 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
     }
 
     if (!event.key().hasModifier()) {
-        std::string keyStr = event.key().toString();
-        if (const auto* candidates = khold_->getCandidates(keyStr)) {
-            if (holding_) return true;
+        if (const auto* candidates = khold_->getCandidates(sym)) {
+            if (holding_) return true; // Ignoriraj sistemski repeat
             
             holding_ = true;
-            currentKey_ = keyStr;
+            currentKeySym_ = sym;
+            currentKeyStr_ = event.key().toString(); // toString kličemo le ob prvem pritisku
             currentCandidates_ = *candidates;
-
-            // SILENT MODE: No visual feedback on press.
-            // We only wait for the timer.
 
             uint64_t targetTime = now(CLOCK_MONOTONIC) + khold_->delay() * 1000;
             if (!timer_) {
@@ -120,7 +119,7 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
     if (holding_) {
         timer_->setEnabled(false);
         holding_ = false;
-        ic_->commitString(currentKey_);
+        ic_->commitString(currentKeyStr_);
         reset();
         return false;
     }
@@ -143,9 +142,8 @@ void KHoldState::onTimer() {
     candidateList->setSelectionKey(selectionKeys);
     ic_->inputPanel().setCandidateList(std::move(candidateList));
     
-    // Show highlighted preedit only after timer expires
     Text preedit;
-    preedit.append(currentKey_, TextFormatFlag::HighLight);
+    preedit.append(currentKeyStr_, TextFormatFlag::HighLight);
     ic_->inputPanel().setPreedit(preedit); 
     
     ic_->updateUserInterface(UserInterfaceComponent::InputPanel);
@@ -160,7 +158,7 @@ KHold::KHold(Instance *instance)
                                      EventWatcherPhase::PreInputMethod,
                                      [this](Event &event) { onKeyEvent(event); });
     KHold::reloadConfig();
-    FCITX_INFO() << "KHold: Initialized";
+    FCITX_INFO() << "KHold: Initialized (Optimized)";
 }
 
 KHold::~KHold() = default;
@@ -169,7 +167,10 @@ void KHold::reloadConfig() {
     readAsIni(config_, "conf/khold.conf");
     entryMap_.clear();
     for (const auto& entry : config_.entries.value()) {
-        entryMap_[entry.key.value()] = entry.candidates.value();
+        Key k(entry.key.value());
+        if (k.isValid()) {
+            entryMap_[k.sym()] = entry.candidates.value();
+        }
     }
 }
 
@@ -179,8 +180,8 @@ void KHold::setConfig(const RawConfig &config) {
     reloadConfig();
 }
 
-const std::vector<std::string>* KHold::getCandidates(const std::string& key) const {
-    auto it = entryMap_.find(key);
+const std::vector<std::string>* KHold::getCandidates(KeySym sym) const {
+    auto it = entryMap_.find(sym);
     if (it != entryMap_.end()) {
         return &it->second;
     }
@@ -189,7 +190,7 @@ const std::vector<std::string>* KHold::getCandidates(const std::string& key) con
 
 void KHold::onKeyEvent(Event &event) const
 {
-    auto &keyEvent = dynamic_cast<KeyEvent &>(event);
+    auto &keyEvent = static_cast<KeyEvent &>(event);
     auto *state = keyEvent.inputContext()->propertyFor(&factory_);
     if (state->handleKeyEvent(keyEvent)) {
         keyEvent.filterAndAccept();

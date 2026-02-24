@@ -72,7 +72,8 @@ public:
     std::unique_ptr<EventSourceTime> timer_;
     bool holding_ = false;
     bool lookupTableActive_ = false;
-    std::string currentKey_;
+    std::string currentKeyStr_;
+    KeySym currentKeySym_ = FcitxKey_None;
     std::vector<std::string> currentCandidates_;
 };
 
@@ -88,14 +89,14 @@ public:
     const Configuration *getConfig() const override { return &config_; }
     void setConfig(const RawConfig &config) override;
 
-    const std::vector<std::string>* getCandidates(const std::string& key) const;
+    const std::vector<std::string>* getCandidates(KeySym sym) const;
     int delay() const { return config_.delay.value(); }
 
 private:
     void onKeyEvent(Event &event) const;
     Instance *instance_;
     KHoldConfig config_;
-    std::unordered_map<std::string, std::vector<std::string>> entryMap_;
+    std::unordered_map<KeySym, std::vector<std::string>> entryMap_;
     FactoryFor<KHoldState> factory_;
     std::unique_ptr<HandlerTableEntry<EventHandler>> handler_;
 };
