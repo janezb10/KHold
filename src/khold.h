@@ -31,8 +31,14 @@
 #include <fcitx-utils/i18n.h>
 
 #include <utility>
+#include <unordered_map>
 
 namespace fcitx {
+
+struct KHoldEntryInternal {
+    std::string keyUTF8;
+    std::vector<std::string> candidates;
+};
 
 FCITX_CONFIGURATION(KHoldEntry,
     Option<std::string> key{this, "Key", _("Trigger Key")};
@@ -40,7 +46,9 @@ FCITX_CONFIGURATION(KHoldEntry,
 );
 
 FCITX_CONFIGURATION(KHoldConfig,
-    Option<int, IntConstrain> delay{this, "Delay", _("Long Press Delay (ms)"), 600, IntConstrain(100, 2000)};
+    Option<int, IntConstrain> delay{this, "Delay", _("Long Press Delay (ms)"), 400, IntConstrain(100, 2000)};
+    Option<std::string> bulkImport{this, "Bulk Import (key=cands)", _("Bulk Import (key=cands)"), ""};
+    Option<std::string> bulkImportJson{this, "Bulk Import (JSON)", _("Bulk Import (JSON string)"), ""};
     OptionWithAnnotation<std::vector<KHoldEntry>, ListDisplayOptionAnnotation>
         entries{this, "Entries", _("Long Press Entries"), {}, {}, {}, 
         ListDisplayOptionAnnotation("Key")};
@@ -72,7 +80,7 @@ public:
     std::unique_ptr<EventSourceTime> timer_;
     bool holding_ = false;
     bool lookupTableActive_ = false;
-    std::string currentKeyStr_;
+    std::string currentKeyUTF8_;
     KeySym currentKeySym_ = FcitxKey_None;
     std::vector<std::string> currentCandidates_;
 };
@@ -89,14 +97,14 @@ public:
     const Configuration *getConfig() const override { return &config_; }
     void setConfig(const RawConfig &config) override;
 
-    const std::vector<std::string>* getCandidates(KeySym sym) const;
+    const KHoldEntryInternal* getEntry(KeySym sym) const;
     int delay() const { return config_.delay.value(); }
 
 private:
     void onKeyEvent(Event &event) const;
     Instance *instance_;
     KHoldConfig config_;
-    std::unordered_map<KeySym, std::vector<std::string>> entryMap_;
+    std::unordered_map<KeySym, KHoldEntryInternal> entryMap_;
     FactoryFor<KHoldState> factory_;
     std::unique_ptr<HandlerTableEntry<EventHandler>> handler_;
 };
