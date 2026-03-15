@@ -58,6 +58,13 @@ void KHoldState::reset() {
     ic_->updatePreedit();
 }
 
+void KHoldState::flush() {
+    if (holding_ && !lookupTableActive_ && !currentKeyUTF8_.empty()) {
+        ic_->commitString(currentKeyUTF8_);
+    }
+    reset();
+}
+
 bool KHoldState::handleKeyEvent(const KeyEvent &event) {
     KeySym sym = event.key().sym();
 
@@ -89,7 +96,7 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
             reset();
             return true;
         }
-        reset();
+        flush();
         return false;
     }
 
@@ -101,7 +108,7 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
     if (const auto* entry = khold_->getEntry(sym)) {
         holding_ = true;
         currentKeySym_ = sym;
-        currentKeyUTF8_ = Key::keySymToUTF8(sym);
+        currentKeyUTF8_ = entry->keyUTF8;
         currentCandidates_ = entry->candidates;
 
         uint64_t targetTime = now(CLOCK_MONOTONIC) + khold_->delay() * 1000;
@@ -119,10 +126,8 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
         return true;
     }
 
-    if (holding_ && !lookupTableActive_) {
-        if (timer_) timer_->setEnabled(false);
-        ic_->commitString(currentKeyUTF8_);
-        reset();
+    if (holding_) {
+        flush();
         return false;
     }
 
@@ -156,9 +161,15 @@ KHold::KHold(Instance *instance)
     : instance_(instance),
       factory_([this](InputContext &ic) { return new KHoldState(this, &ic); }) {
     instance_->inputContextManager().registerProperty("khold_state", &factory_);
-    handler_ = instance_->watchEvent(EventType::InputContextKeyEvent, 
+    handlerKey_ = instance_->watchEvent(EventType::InputContextKeyEvent, 
                                      EventWatcherPhase::PreInputMethod,
                                      [this](Event &event) { onKeyEvent(event); });
+    handlerReset_ = instance_->watchEvent(EventType::InputContextReset, 
+                                     EventWatcherPhase::PreInputMethod,
+                                     [this](Event &event) { onResetEvent(event); });
+    handlerFocusOut_ = instance_->watchEvent(EventType::InputContextFocusOut, 
+                                     EventWatcherPhase::PreInputMethod,
+                                     [this](Event &event) { onResetEvent(event); });
     KHold::reloadConfig();
     FCITX_INFO() << "KHold: Initialized";
 }
@@ -274,6 +285,12 @@ void KHold::onKeyEvent(Event &event) const {
     if (state->handleKeyEvent(keyEvent)) {
         keyEvent.filterAndAccept();
     }
+}
+
+void KHold::onResetEvent(Event &event) const {
+    auto &icEvent = static_cast<InputContextEvent &>(event);
+    auto *state = icEvent.inputContext()->propertyFor(&factory_);
+    state->flush();
 }
 
 } // namespace fcitx
