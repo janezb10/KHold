@@ -3,10 +3,12 @@
 KHold is a global module for Fcitx 5 that provides an intuitive character selection menu when a key is held down. It is designed for picking accented characters (like č, ć, š) or any other symbols without changing your keyboard layout.
 
 ## Features
-- **Silent Typing:** Standard key behavior remains unchanged; symbols are committed on release for short presses.
+- **Zero-Lag Typing:** Immediate character commit in supported applications (Fast Path).
+- **Wayland Ready:** Intelligent fallback to Preedit (Safe Path) for applications with limited surrounding text support (e.g., Konsole on Wayland).
+- **Hybrid Logic:** Automatically chooses the best input method per-application to prevent duplicate characters ("cč").
 - **Customizable:** Add any key-symbol pairs through the Fcitx 5 configuration GUI.
 - **Horizontal Picker:** A clean, horizontal selection window that stays out of your way.
-- **Visual Feedback:** The character is highlighted in the text only when the picker is active.
+- **Visual Feedback:** The character is highlighted with an underline only when the long-press picker is active.
 - **Adjustable Delay:** Fine-tune the hold duration to match your typing speed.
 - **Bulk Import:** Quickly configure many keys at once using JSON or simple text formats.
 
@@ -30,6 +32,7 @@ cmake ..
 make
 
 # 3. Install
+# Note: Path may vary. Use /usr/lib/fcitx5/ on Arch/Fedora.
 sudo cp libkhold.so /usr/lib/x86_64-linux-gnu/fcitx5/libkhold.so
 sudo cp khold.conf /usr/share/fcitx5/addon/khold.conf
 
@@ -41,7 +44,7 @@ fcitx5 -r
 1. Open **Fcitx 5 Configuration**.
 2. Go to the **Addons** tab.
 3. Find **KHold** and click the **Configure** (gear) icon.
-4. **Delay:** Set your preferred long-press trigger time in milliseconds (default: 600ms).
+4. **Delay:** Set your preferred long-press trigger time in milliseconds (default: 400ms).
 5. **Entries:** Add your desired keys (e.g., `c`) and candidates (e.g., `č`, `ć`).
 6. **Bulk Import (JSON string):** For quick setup, you can paste a JSON object to populate your entries. The values can be either a string of characters or an array of strings (allowing candidates with multiple characters).
 
@@ -85,15 +88,13 @@ fcitx5 -r
    **Note:** Pasting JSON will add/update entries in the list above and clear the JSON input field.
 7. Click **Apply**.
 
-## Support the Project
-If KHold makes your typing experience smoother, consider supporting its development:
-- **GitHub Sponsors**
-- **Buy me a coffee**
-
 ## Technical Details
 - **Trigger Delay:** Configurable via GUI (100ms - 2000ms).
+- **Hybrid Input Engine:**
+  - **Fast Path:** Uses `commitString` + `deleteSurroundingText` for zero-lag input in apps with full IME support.
+  - **Safe Path:** Uses `Preedit` (underlined text) for terminal emulators and Wayland apps where surrounding text is unreliable.
 - **Global Module:** Implemented as an `AddonInstance` with a `PreInputMethod` event watcher.
-- **Compatibility:** Optimized for Fcitx 5.1.12+.
+- **Compatibility:** Optimized for Fcitx 5.1.12+ and KDE Plasma 6 (Wayland).
 
 ## License
 [LGPL-2.1-or-later](https://www.gnu.org/licenses/lgpl-2.1.html)
