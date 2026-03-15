@@ -99,7 +99,7 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
             ic_->inputPanel().candidateList()->candidate(idx).select(ic_);
             return true;
         }
-        if (sym == FcitxKey_space) {
+        if (sym == khold_->pageKeySym()) {
             if (auto *pageable = ic_->inputPanel().candidateList()->toPageable()) {
                 if (pageable->hasNext()) {
                     pageable->next();
@@ -209,6 +209,14 @@ KHold::~KHold() = default;
 
 void KHold::reloadConfig() {
     readAsIni(config_, "conf/khold.conf");
+    
+    Key kPage(config_.pageKey.value());
+    if (kPage.isValid()) {
+        pageKeySym_ = kPage.sym();
+    } else {
+        pageKeySym_ = FcitxKey_space;
+    }
+
     entryMap_.clear();
     for (const auto& entry : config_.entries.value()) {
         Key k(entry.key.value());

@@ -47,6 +47,7 @@ FCITX_CONFIGURATION(KHoldEntry,
 
 FCITX_CONFIGURATION(KHoldConfig,
     Option<int, IntConstrain> delay{this, "Delay", _("Long Press Delay (ms)"), 600, IntConstrain(100, 2000)};
+    Option<std::string> pageKey{this, "PageKey", _("Paging Key"), "space"};
     Option<std::string> bulkImport{this, "Bulk Import (key=cands)", _("Bulk Import (key=cands)"), ""};
     Option<std::string> bulkImportJson{this, "Bulk Import (JSON)", _("Bulk Import (JSON string)"), ""};
     OptionWithAnnotation<std::vector<KHoldEntry>, ListDisplayOptionAnnotation>
@@ -101,12 +102,14 @@ public:
 
     const KHoldEntryInternal* getEntry(KeySym sym) const;
     int delay() const { return config_.delay.value(); }
+    KeySym pageKeySym() const { return pageKeySym_; }
 
 private:
     void onKeyEvent(Event &event) const;
     void onResetEvent(Event &event) const;
     Instance *instance_;
     KHoldConfig config_;
+    KeySym pageKeySym_ = FcitxKey_space;
     std::unordered_map<KeySym, KHoldEntryInternal> entryMap_;
     FactoryFor<KHoldState> factory_;
     std::unique_ptr<HandlerTableEntry<EventHandler>> handlerKey_;
