@@ -46,7 +46,7 @@ FCITX_CONFIGURATION(KHoldEntry,
 );
 
 FCITX_CONFIGURATION(KHoldConfig,
-    Option<int, IntConstrain> delay{this, "Delay", _("Long Press Delay (ms)"), 600, IntConstrain(100, 2000)};
+    Option<int, IntConstrain> delay{this, "Delay", _("Long Press Delay (ms)"), 400, IntConstrain(100, 2000)};
     Option<std::string> pageKey{this, "PageKey", _("Paging Key"), "space"};
     Option<std::string> bulkImport{this, "Bulk Import (key=cands)", _("Bulk Import (key=cands)"), ""};
     Option<std::string> bulkImportJson{this, "Bulk Import (JSON)", _("Bulk Import (JSON string)"), ""};
