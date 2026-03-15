@@ -99,6 +99,17 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
             ic_->inputPanel().candidateList()->candidate(idx).select(ic_);
             return true;
         }
+        if (sym == FcitxKey_space) {
+            if (auto *pageable = ic_->inputPanel().candidateList()->toPageable()) {
+                if (pageable->hasNext()) {
+                    pageable->next();
+                } else {
+                    pageable->setPage(0);
+                }
+                ic_->updateUserInterface(UserInterfaceComponent::InputPanel);
+                return true;
+            }
+        }
         if (sym == FcitxKey_Escape || sym == FcitxKey_BackSpace) {
             reset();
             return true;
@@ -147,22 +158,32 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
 void KHoldState::onTimer() {
     if (!holding_) return;
     lookupTableActive_ = true;
-    
+
     auto candidateList = std::make_unique<CommonCandidateList>();
-    KeyList selectionKeys;
     for (int i = 0; i < static_cast<int>(currentCandidates_.size()); ++i) {
         candidateList->append(std::make_unique<KHoldCandidateWord>(khold_, currentCandidates_[i]));
+    }
+
+    KeyList selectionKeys;
+    for (int i = 0; i < 9; ++i) {
         selectionKeys.emplace_back(static_cast<KeySym>(FcitxKey_1 + i));
     }
-    
+
     candidateList->setLayoutHint(CandidateLayoutHint::Horizontal);
     candidateList->setSelectionKey(selectionKeys);
+
+    if (currentCandidates_.size() > 9) {
+        candidateList->setPageSize(9);
+    } else {
+        candidateList->setPageSize(currentCandidates_.size());
+    }
+
     ic_->inputPanel().setCandidateList(std::move(candidateList));
-    
+
     Text preedit;
-    preedit.append(currentKeyUTF8_, TextFormatFlag::HighLight);
-    ic_->inputPanel().setPreedit(preedit); 
-    
+    preedit.append(currentKeyUTF8_, TextFormatFlag::Underline);
+    ic_->inputPanel().setPreedit(preedit);
+
     ic_->updateUserInterface(UserInterfaceComponent::InputPanel);
     ic_->updatePreedit();
 }
