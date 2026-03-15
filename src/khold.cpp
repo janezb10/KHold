@@ -36,6 +36,15 @@ namespace fcitx {
 
 void KHoldCandidateWord::select(InputContext *inputContext) const {
     auto *state = inputContext->propertyFor(&khold_->factory());
+    if (state && state->committed_) {
+        if (inputContext->capabilityFlags().test(CapabilityFlag::SurroundingText) &&
+            inputContext->surroundingText().isValid()) {
+            inputContext->deleteSurroundingText(-1, 1);
+        } else {
+            // Fallback to backspace if surrounding text became invalid
+            inputContext->forwardKey(Key(FcitxKey_BackSpace));
+        }
+    }
     inputContext->commitString(text().stringAt(0));
     if (state) state->reset();
 }
@@ -61,7 +70,9 @@ void KHoldState::reset() {
 
 void KHoldState::flush() {
     if (holding_ && !lookupTableActive_ && !currentKeyUTF8_.empty()) {
-        ic_->commitString(currentKeyUTF8_);
+        if (!committed_) {
+            ic_->commitString(currentKeyUTF8_);
+        }
     }
     reset();
 }
@@ -74,8 +85,10 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
             if (lookupTableActive_) {
                 holding_ = false;
             } else {
-                // Normal short press release: commit the character now
-                ic_->commitString(currentKeyUTF8_);
+                // If we haven't committed yet (Safe/Preedit path), do it now
+                if (!committed_) {
+                    ic_->commitString(currentKeyUTF8_);
+                }
                 reset();
             }
             return true;
@@ -125,11 +138,20 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
         currentKeyUTF8_ = entry->keyUTF8;
         currentCandidates_ = entry->candidates;
 
-        // Show character in Preedit (underlined) instead of committing it
-        Text preedit;
-        preedit.append(currentKeyUTF8_, TextFormatFlag::Underline);
-        ic_->inputPanel().setPreedit(preedit);
-        ic_->updatePreedit();
+        // HYBRID LOGIC (Stable):
+        // Use Fast Path (immediate commit) if SurroundingText is available and valid.
+        if (ic_->capabilityFlags().test(CapabilityFlag::SurroundingText) && 
+            ic_->surroundingText().isValid()) {
+            ic_->commitString(currentKeyUTF8_);
+            committed_ = true;
+        } else {
+            // Safe Path (Preedit) for apps like Konsole on Wayland
+            Text preedit;
+            preedit.append(currentKeyUTF8_, TextFormatFlag::Underline);
+            ic_->inputPanel().setPreedit(preedit);
+            ic_->updatePreedit();
+            committed_ = false;
+        }
 
         uint64_t targetTime = now(CLOCK_MONOTONIC) + khold_->delay() * 1000;
         if (!timer_) {
