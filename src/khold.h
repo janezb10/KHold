@@ -80,6 +80,7 @@ public:
     InputContext *ic_;
     std::unique_ptr<EventSourceTime> timer_;
     bool holding_ = false;
+    bool committed_ = false;
     bool lookupTableActive_ = false;
     std::string currentKeyUTF8_;
     KeySym currentKeySym_ = FcitxKey_None;

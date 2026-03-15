@@ -35,9 +35,16 @@
 namespace fcitx {
 
 void KHoldCandidateWord::select(InputContext *inputContext) const {
-    inputContext->commitString(text().stringAt(0));
     auto *state = inputContext->propertyFor(&khold_->factory());
-    state->reset();
+    if (state && state->committed_) {
+        if (inputContext->capabilityFlags().test(CapabilityFlag::SurroundingText)) {
+            inputContext->deleteSurroundingText(-1, 1);
+        } else {
+            inputContext->forwardKey(Key(FcitxKey_BackSpace));
+        }
+    }
+    inputContext->commitString(text().stringAt(0));
+    if (state) state->reset();
 }
 
 KHoldState::KHoldState(KHold *khold, InputContext *ic) : khold_(khold), ic_(ic) {}
@@ -49,6 +56,7 @@ KHoldState::~KHoldState() {
 void KHoldState::reset() {
     if (timer_) timer_->setEnabled(false);
     holding_ = false;
+    committed_ = false;
     lookupTableActive_ = false;
     currentKeyUTF8_.clear();
     currentKeySym_ = FcitxKey_None;
@@ -59,7 +67,7 @@ void KHoldState::reset() {
 }
 
 void KHoldState::flush() {
-    if (holding_ && !lookupTableActive_ && !currentKeyUTF8_.empty()) {
+    if (holding_ && !lookupTableActive_ && !currentKeyUTF8_.empty() && !committed_) {
         ic_->commitString(currentKeyUTF8_);
     }
     reset();
@@ -74,7 +82,6 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
                 holding_ = false;
             } else {
                 if (timer_) timer_->setEnabled(false);
-                ic_->commitString(currentKeyUTF8_);
                 reset();
             }
             return true;
@@ -110,6 +117,9 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
         currentKeySym_ = sym;
         currentKeyUTF8_ = entry->keyUTF8;
         currentCandidates_ = entry->candidates;
+
+        ic_->commitString(currentKeyUTF8_);
+        committed_ = true;
 
         uint64_t targetTime = now(CLOCK_MONOTONIC) + khold_->delay() * 1000;
         if (!timer_) {
