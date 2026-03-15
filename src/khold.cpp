@@ -36,13 +36,6 @@ namespace fcitx {
 
 void KHoldCandidateWord::select(InputContext *inputContext) const {
     auto *state = inputContext->propertyFor(&khold_->factory());
-    if (state && state->committed_) {
-        if (inputContext->capabilityFlags().test(CapabilityFlag::SurroundingText)) {
-            inputContext->deleteSurroundingText(-1, 1);
-        } else {
-            inputContext->forwardKey(Key(FcitxKey_BackSpace));
-        }
-    }
     inputContext->commitString(text().stringAt(0));
     if (state) state->reset();
 }
@@ -67,7 +60,7 @@ void KHoldState::reset() {
 }
 
 void KHoldState::flush() {
-    if (holding_ && !lookupTableActive_ && !currentKeyUTF8_.empty() && !committed_) {
+    if (holding_ && !lookupTableActive_ && !currentKeyUTF8_.empty()) {
         ic_->commitString(currentKeyUTF8_);
     }
     reset();
@@ -81,7 +74,8 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
             if (lookupTableActive_) {
                 holding_ = false;
             } else {
-                if (timer_) timer_->setEnabled(false);
+                // Normal short press release: commit the character now
+                ic_->commitString(currentKeyUTF8_);
                 reset();
             }
             return true;
@@ -124,13 +118,18 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
     }
 
     if (const auto* entry = khold_->getEntry(sym)) {
+        if (holding_) flush();
+
         holding_ = true;
         currentKeySym_ = sym;
         currentKeyUTF8_ = entry->keyUTF8;
         currentCandidates_ = entry->candidates;
 
-        ic_->commitString(currentKeyUTF8_);
-        committed_ = true;
+        // Show character in Preedit (underlined) instead of committing it
+        Text preedit;
+        preedit.append(currentKeyUTF8_, TextFormatFlag::Underline);
+        ic_->inputPanel().setPreedit(preedit);
+        ic_->updatePreedit();
 
         uint64_t targetTime = now(CLOCK_MONOTONIC) + khold_->delay() * 1000;
         if (!timer_) {
