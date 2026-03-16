@@ -41,7 +41,6 @@ void KHoldCandidateWord::select(InputContext *inputContext) const {
             inputContext->surroundingText().isValid()) {
             inputContext->deleteSurroundingText(-1, 1);
         } else {
-            // Fallback to backspace if surrounding text became invalid
             inputContext->forwardKey(Key(FcitxKey_BackSpace));
         }
     }
@@ -82,21 +81,25 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
 
     if (event.isRelease()) {
         if (holding_ && sym == currentKeySym_) {
+            bool wasCommitted = committed_;
             if (lookupTableActive_) {
                 holding_ = false;
             } else {
-                // If we haven't committed yet (Safe/Preedit path), do it now
-                if (!committed_) {
+                if (!wasCommitted) {
                     ic_->commitString(currentKeyUTF8_);
                 }
                 reset();
             }
+            if (wasCommitted) return false;
             return true;
         }
         return lookupTableActive_;
     }
 
     if (holding_ && sym == currentKeySym_) {
+        if (committed_) {
+            return false;
+        }
         return true; 
     }
 
@@ -138,34 +141,47 @@ bool KHoldState::handleKeyEvent(const KeyEvent &event) {
         currentKeyUTF8_ = entry->keyUTF8;
         currentCandidates_ = entry->candidates;
 
-        // HYBRID LOGIC (Stable):
-        // Use Fast Path (immediate commit) if SurroundingText is available and valid.
+        // TRANSPARENT HYBRID LOGIC:
         if (ic_->capabilityFlags().test(CapabilityFlag::SurroundingText) && 
             ic_->surroundingText().isValid()) {
-            ic_->commitString(currentKeyUTF8_);
             committed_ = true;
+
+            uint64_t targetTime = now(CLOCK_MONOTONIC) + khold_->delay() * 1000;
+            if (!timer_) {
+                timer_ = khold_->instance()->eventLoop().addTimeEvent(
+                    CLOCK_MONOTONIC, targetTime, 0, [this](EventSourceTime *, uint64_t) {
+                        this->onTimer();
+                        return false;
+                    });
+            } else {
+                timer_->setTime(targetTime);
+            }
+            timer_->setEnabled(true);
+            timer_->setOneShot();
+            
+            return false; // Fast Path: Let app type the character
         } else {
-            // Safe Path (Preedit) for apps like Konsole on Wayland
+            // Safe Path (Preedit)
             Text preedit;
             preedit.append(currentKeyUTF8_, TextFormatFlag::Underline);
             ic_->inputPanel().setPreedit(preedit);
             ic_->updatePreedit();
             committed_ = false;
-        }
 
-        uint64_t targetTime = now(CLOCK_MONOTONIC) + khold_->delay() * 1000;
-        if (!timer_) {
-            timer_ = khold_->instance()->eventLoop().addTimeEvent(
-                CLOCK_MONOTONIC, targetTime, 0, [this](EventSourceTime *, uint64_t) {
-                    this->onTimer();
-                    return false;
-                });
-        } else {
-            timer_->setTime(targetTime);
+            uint64_t targetTime = now(CLOCK_MONOTONIC) + khold_->delay() * 1000;
+            if (!timer_) {
+                timer_ = khold_->instance()->eventLoop().addTimeEvent(
+                    CLOCK_MONOTONIC, targetTime, 0, [this](EventSourceTime *, uint64_t) {
+                        this->onTimer();
+                        return false;
+                    });
+            } else {
+                timer_->setTime(targetTime);
+            }
+            timer_->setEnabled(true);
+            timer_->setOneShot();
+            return true;
         }
-        timer_->setEnabled(true);
-        timer_->setOneShot();
-        return true;
     }
 
     if (holding_) {
