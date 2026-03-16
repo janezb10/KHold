@@ -88,6 +88,20 @@ fcitx5 -r
    **Note:** Pasting JSON will add/update entries in the list above and clear the JSON input field.
 7. Click **Apply**.
 
+## Troubleshooting (Wayland / Key Repeat)
+
+If key repeat is not working in specific applications on Wayland, try the following:
+
+### JetBrains IDEs (IntelliJ, PyCharm, etc.)
+Enable the native Wayland toolkit to improve IME and key repeat compatibility:
+1. Go to **Help -> Edit Custom VM Options...**
+2. Add the following line:
+   ```text
+   -Dawt.toolkit.name=WLToolkit
+   ```
+3. Restart the IDE.
+
+
 ## Technical Details
 - **Trigger Delay:** Configurable via GUI (100ms - 2000ms).
 - **Hybrid Input Engine:**
